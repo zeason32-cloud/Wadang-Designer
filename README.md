@@ -16,7 +16,7 @@ http://127.0.0.1:8004/index.html?debug=true
 
 ## GitHub Pages
 
-This repository is deployed from the repository root by `.github/workflows/pages.yml`.
+This repository is deployed from the repository root of the `main` branch.
 
 Pages URL:
 
