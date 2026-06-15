@@ -1,0 +1,139 @@
+﻿{
+  "schemaVersion": 2,
+  "savedAt": "2026-05-12T01:58:31.076Z",
+  "text": "逢考必过",
+  "cells": [
+    "逢",
+    "考",
+    "过",
+    "必"
+  ],
+  "centerCell": "",
+  "cellSettings": [
+    {
+      "flow": "cw"
+    },
+    {
+      "flow": "cw"
+    },
+    {
+      "flow": "ccw"
+    },
+    {
+      "flow": "ccw"
+    }
+  ],
+  "cellOrder": [
+    0,
+    1,
+    3,
+    2
+  ],
+  "mode": "radialRing",
+  "fontKey": "HanyiZhuanshuFan",
+  "parameters": {
+    "boardZoom": 100,
+    "centerRadius": 126,
+    "innerRadius": 18,
+    "outerRadius": 336,
+    "boundaryInnerRadius": 59,
+    "boundaryOuterRadius": 185,
+    "ornamentStrokeWidth": 7,
+    "outerBorderRadius": 226,
+    "outerBorderStrokeWidth": 24,
+    "innerOuterBorderEnabled": true,
+    "innerOuterBorderRadius": 206,
+    "innerOuterBorderStrokeWidth": 4,
+    "outerPatternType": "mesh",
+    "outerPatternRingCount": 1,
+    "outerPatternAngleDivisions": 81,
+    "outerPatternStrokeWidth": 3.3,
+    "outerPatternJumpSpan": 1,
+    "centerDecorationMode": "ornaments",
+    "surroundDecorationMode": "nails",
+    "surroundPatternType": "mesh",
+    "surroundPatternBandWidth": 24,
+    "surroundPatternRingCount": 3,
+    "surroundPatternAngleDivisions": 12,
+    "surroundPatternStrokeWidth": 2,
+    "surroundPatternJumpSpan": 1,
+    "centerCellHeightScale": 1,
+    "centerCellWidthScale": 1,
+    "exportResolution": 1080,
+    "textReliefHeight": 6.95,
+    "textReliefBevelProfile": "log",
+    "textReliefBevelSize": 1.5,
+    "boundaryReliefHeight": 6,
+    "boundaryReliefBevelProfile": "log",
+    "boundaryReliefBevelSize": 1.5,
+    "patternReliefHeight": 4.6,
+    "patternReliefBevelProfile": "round",
+    "patternReliefBevelSize": 0.95,
+    "outerBorderReliefHeight": 16.1,
+    "outerBorderReliefBevelProfile": "round",
+    "outerBorderReliefBevelSize": 2.35,
+    "centerNailReliefHeight": 10.55,
+    "centerNailReliefBevelProfile": "round",
+    "centerNailReliefBevelSize": 12,
+    "surroundNailReliefHeight": 6.4,
+    "surroundNailReliefBevelProfile": "round",
+    "surroundNailReliefBevelSize": 11.6,
+    "glyphStrokeWidth": 1.05,
+    "centerNailRadius": 26,
+    "centerNailBoundaryEnabled": false,
+    "centerNailBoundaryRadius": 32,
+    "centerNailBoundaryStrokeWidth": 4,
+    "surroundNailRadius": 42,
+    "surroundNailSize": 6,
+    "surroundNailCount": 8,
+    "dividerStyle": "parallelDouble",
+    "dividerStrokeWidth": 6,
+    "gridCount": 4,
+    "cellFillMode": "polarWarp",
+    "cellInsetMargin": 8,
+    "ringOrientation": "vertical",
+    "cells": [
+      "逢",
+      "考",
+      "过",
+      "必"
+    ],
+    "centerCell": "",
+    "cellSettings": [
+      {
+        "flow": "cw"
+      },
+      {
+        "flow": "cw"
+      },
+      {
+        "flow": "ccw"
+      },
+      {
+        "flow": "ccw"
+      }
+    ],
+    "cellOrder": [
+      0,
+      1,
+      3,
+      2
+    ],
+    "rotationAngle": 0,
+    "startAngle": 360,
+    "sweepAngle": 360,
+    "fontSize": 120,
+    "fontHeightScale": 1.35,
+    "fontWidthScale": 1.49,
+    "tracking": 80,
+    "lineGap": 0,
+    "padding": 4,
+    "alternateFlow": false,
+    "showGuides": false,
+    "showGrid": false,
+    "showGlyphGrid": false,
+    "showAngleDebug": false,
+    "showOrnamentRings": true,
+    "equalRingSpacing": true
+  }
+}

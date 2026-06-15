@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>环形四字瓦当生成器</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="simplified-ui">
+    <main class="app-shell">
+      <section class="workspace" aria-label="环形四字瓦当预览">
+        <div class="preview-header">
+          <div>
+            <h1>环形四字瓦当生成器</h1>
+            <p id="modeSummary">输入文字，按字数自动匹配瓦当配置并生成 3D 浮雕。</p>
+          </div>
+          <nav class="mode-links" aria-label="界面模式">
+            <a class="mode-link simplified-only" href="index.html?debug=true">调试</a>
+            <a class="mode-link debug-only" href="index.html">简化</a>
+          </nav>
+        </div>
+        <input id="layoutFile" type="file" accept=".json,application/json" hidden />
+
+        <div class="viewport-shell panel-card">
+          <div class="viewport-switch segmented viewport-tabs" role="tablist" aria-label="预览视窗">
+            <label>
+              <input id="viewFlat" type="radio" name="previewViewport" value="flat" />
+              <span>平面预览</span>
+            </label>
+            <label>
+              <input id="viewRelief" type="radio" name="previewViewport" value="relief" checked />
+              <span>3D 预览</span>
+            </label>
+          </div>
+
+          <div class="viewport-panel" id="flatViewport" data-viewport="flat">
+            <div class="viewport-toolbar">
+              <div class="viewport-copy">
+                <span>平面预览</span>
+                <p>实时查看字环、边界和装饰的 2D 成品布局。</p>
+              </div>
+              <button class="icon-button secondary-button" id="centerRing" type="button" title="分界线居中到 12 点" aria-label="分界线居中到 12 点">
+                <span aria-hidden="true">居中</span>
+              </button>
+            </div>
+            <div class="stage">
+              <div class="artboard" id="artboard">
+                <svg id="ringSvg" viewBox="0 0 900 900" role="img" aria-labelledby="svgTitle svgDesc">
+                  <title id="svgTitle">环形四字瓦当预览</title>
+                  <desc id="svgDesc">四字被自动排布并扭曲到环形瓦当结构内。</desc>
+                  <defs>
+                    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#1b1f23" flood-opacity="0.14" />
+                    </filter>
+                  </defs>
+                  <g id="ringGuides"></g>
+                  <g id="textLayer"></g>
+                  <g id="debugLayer"></g>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="viewport-panel is-active" id="reliefViewport" data-viewport="relief">
+            <div class="relief-preview-panel" id="reliefPreviewPanel">
+              <div class="relief-preview-head">
+                <div class="viewport-copy">
+                  <span>3D 浮雕预览</span>
+                  <p>进入视窗后自动生成，可拖动旋转、滚轮缩放。</p>
+                </div>
+                <button class="tiny-button" id="previewRelief" type="button">刷新 3D</button>
+              </div>
+              <canvas id="reliefPreviewCanvas" width="900" height="520" aria-label="3D 浮雕预览"></canvas>
+              <div class="result-actions simplified-only" aria-label="结果操作">
+                <button class="result-action-button" id="resultExportStl" type="button" aria-label="导出 STL 文件">导出</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="simplified-text-bar simplified-only">
+          <label class="field">
+            <span>匹配文字</span>
+            <input id="simpleAutoMatchText" type="text" placeholder="例如：长乐未央" />
+          </label>
+          <button class="primary-action compact-action" id="simpleAutoMatchLayout" type="button">自动匹配</button>
+        </div>
+      </section>
+
+      <aside class="controls" aria-label="瓦当生成参数">
+        <div class="controls-intro panel-card">
+          <div class="panel-head">
+            <span class="label-text">参数面板</span>
+            <p>按排版、边界、装饰和浮雕分层组织，长列表可在右侧独立滚动浏览。</p>
+          </div>
+        </div>
+
+        <div class="control-group hidden-controls" aria-hidden="true">
+          <label for="sourceText">瓦当文字</label>
+          <textarea id="sourceText" rows="2" maxlength="16">长乐未央</textarea>
+        </div>
+
+        <div class="control-group hidden-controls" aria-hidden="true">
+          <span class="label-text">排版方案</span>
+          <div class="segmented" role="radiogroup" aria-label="排版方案">
+            <label>
+              <input type="radio" name="layoutMode" value="flatDebug" />
+              <span>无</span>
+            </label>
+            <label>
+              <input type="radio" name="layoutMode" value="tangentBaseline" />
+              <span>径向竖向</span>
+            </label>
+            <label>
+              <input type="radio" name="layoutMode" value="radialBaseline" />
+              <span>环向竖向</span>
+            </label>
+            <label>
+              <input type="radio" name="layoutMode" value="radialRing" checked />
+              <span>环向成环</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="control-group panel-card simplified-controls">
+          <div class="panel-head">
+            <span class="label-text">字数匹配</span>
+            <p>输入整串文字，系统会扫描现有配置，选择字数完全匹配的瓦当模板并填入。</p>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>自动匹配器</span>
+              <p>只按总字数匹配模板；若模板包含中心填字，最后一个字会进入中心格。</p>
+            </div>
+            <div class="inline-fields matcher-row">
+              <label class="field">
+                <span>匹配文字</span>
+                <input id="autoMatchText" type="text" placeholder="例如：长乐未央" />
+              </label>
+              <button class="primary-action compact-action" id="autoMatchLayout" type="button">自动匹配</button>
+            </div>
+          </div>
+          <div class="panel-subcard advanced-only">
+            <div class="subcard-head">
+              <span>快捷配置</span>
+              <p>读取本地预设并快速回到常用起点。</p>
+            </div>
+            <div class="inline-fields config-row">
+              <label class="field">
+                <span>配置列表</span>
+                <select id="layoutPresetSelect">
+                  <option value="">读取中...</option>
+                </select>
+              </label>
+              <button class="tiny-button" id="refreshLayouts" type="button">刷新</button>
+            </div>
+          </div>
+          <div class="panel-subcard advanced-only">
+            <div class="subcard-head">
+              <span>槽位控制</span>
+              <p>先定格数，再对每个槽位单独输入和调整方向。</p>
+            </div>
+            <div class="inline-fields two-up">
+              <label class="field">
+                <span>格数</span>
+                <select id="gridCount">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4" selected>4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                  <option value="9">9</option>
+                  <option value="10">10</option>
+                  <option value="11">11</option>
+                  <option value="12">12</option>
+                </select>
+              </label>
+              <button class="primary-action compact-action" id="autoRing" type="button">一键成环</button>
+            </div>
+            <div class="cell-input-grid" id="cellInputs" aria-label="按格填字"></div>
+          </div>
+        </div>
+
+        <div class="control-group panel-card">
+          <div class="panel-head">
+            <span class="label-text">字体与字形</span>
+            <p>字体来源和单字比例控制。</p>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>字体来源</span>
+              <p>切换目录字体或导入本地字体文件。</p>
+            </div>
+            <label for="fontFamily">字体</label>
+            <div class="font-tools">
+              <select id="fontFamily">
+                <option value="system">系统默认</option>
+                <option value="HanyiZhuanshuFan" selected>汉仪篆书繁</option>
+                <option value="HuiwenMincho" hidden>汇文明朝体</option>
+              </select>
+              <label class="file-button" for="fontFile">
+                <input id="fontFile" type="file" accept=".ttf,.otf,font/ttf,font/otf" />
+                <span>导入字体</span>
+              </label>
+            </div>
+            <p class="font-status" id="fontStatus">已加载目录中的汉仪篆书繁.TTF</p>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>字形比例</span>
+              <p>统一控制字面大小、宽高比例和笔画粗细。</p>
+            </div>
+            <div class="slider-grid">
+              <label>
+                <span>字号</span>
+                <input id="fontSize" type="range" min="4" max="120" value="20" />
+                <output for="fontSize"></output>
+              </label>
+              <label>
+                <span>长度倍数</span>
+                <input id="fontHeightScale" type="range" min="0.5" max="4" step="0.01" value="1" />
+                <output for="fontHeightScale"></output>
+              </label>
+              <label>
+                <span>宽度倍数</span>
+                <input id="fontWidthScale" type="range" min="0.5" max="4" step="0.01" value="1" />
+                <output for="fontWidthScale"></output>
+              </label>
+              <label>
+                <span>笔画宽度</span>
+                <input id="glyphStrokeWidth" type="range" min="0" max="10" step="0.05" value="0" />
+                <output for="glyphStrokeWidth"></output>
+              </label>
+              <label>
+                <span>字距</span>
+                <input id="tracking" type="range" min="-20" max="80" value="3" />
+                <output for="tracking"></output>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group panel-card">
+          <div class="panel-head">
+            <span class="label-text">环形排版</span>
+            <p>控制字环位置、角度与画板视图。</p>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>排版方向</span>
+              <p>切换竖向或横向成环方式。</p>
+            </div>
+          <div class="slider-grid">
+            <label class="field-span-full">
+              <span>填字方式</span>
+              <select id="cellFillMode">
+                <option value="polarWarp" selected>极坐标变形</option>
+                <option value="uprightFit">原方向适应填充</option>
+              </select>
+            </label>
+            <label>
+              <span>边缘距离</span>
+              <input id="cellInsetMargin" type="range" min="0" max="40" step="0.5" value="8" />
+              <output for="cellInsetMargin"></output>
+            </label>
+            <label class="field-span-full">
+              <span>成环方向</span>
+              <select id="ringOrientation">
+                <option value="vertical" selected>竖向成环</option>
+                <option value="horizontal">横向成环</option>
+              </select>
+              </label>
+            </div>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>位置与视图</span>
+              <p>控制字环半径、旋转和左侧画板缩放。</p>
+            </div>
+            <div class="slider-grid">
+              <label>
+                <span>中心半径</span>
+                <input id="centerRadius" type="range" min="20" max="430" value="270" />
+                <output for="centerRadius"></output>
+              </label>
+              <label>
+                <span>旋转角</span>
+                <input id="rotationAngle" type="range" min="-180" max="180" step="0.1" value="0" />
+                <output for="rotationAngle"></output>
+              </label>
+              <label>
+                <span>起始角</span>
+                <input id="startAngle" type="range" min="-1440" max="1440" step="0.1" value="0" />
+                <output for="startAngle"></output>
+              </label>
+              <label>
+                <span>画板缩放</span>
+                <input id="boardZoom" type="range" min="35" max="220" value="100" />
+                <output for="boardZoom"></output>
+              </label>
+              <label class="hidden-controls" aria-hidden="true">
+                <span>内半径</span>
+                <input id="innerRadius" type="range" min="0" max="430" value="170" />
+                <output for="innerRadius"></output>
+              </label>
+              <label class="hidden-controls" aria-hidden="true">
+                <span>外半径</span>
+                <input id="outerRadius" type="range" min="40" max="445" value="360" />
+                <output for="outerRadius"></output>
+              </label>
+              <label class="hidden-controls" aria-hidden="true">
+                <span>覆盖角</span>
+                <input id="sweepAngle" type="range" min="45" max="360" value="280" />
+                <output for="sweepAngle"></output>
+              </label>
+              <label class="hidden-controls" aria-hidden="true">
+                <span>行距</span>
+                <input id="lineGap" type="range" min="0" max="120" value="7" />
+                <output for="lineGap"></output>
+              </label>
+              <label class="hidden-controls" aria-hidden="true">
+                <span>边距</span>
+                <input id="padding" type="range" min="0" max="120" value="10" />
+                <output for="padding"></output>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group panel-card">
+          <div class="panel-head">
+            <span class="label-text">边界与外圈纹样</span>
+            <p>控制内外环、分隔线、外边界，以及外圈带状区域纹样。</p>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>边界骨架</span>
+              <p>先确定字面边界和最外圈轮廓。</p>
+            </div>
+            <div class="slider-grid">
+              <label>
+                <span>边界内环</span>
+                <input id="boundaryInnerRadius" type="range" min="0" max="430" value="300" />
+                <output for="boundaryInnerRadius"></output>
+              </label>
+              <label>
+                <span>边界外环</span>
+                <input id="boundaryOuterRadius" type="range" min="40" max="445" value="360" />
+                <output for="boundaryOuterRadius"></output>
+              </label>
+              <label>
+                <span>边界粗细</span>
+                <input id="ornamentStrokeWidth" type="range" min="1" max="24" value="4" />
+                <output for="ornamentStrokeWidth"></output>
+              </label>
+              <label>
+                <span>外边界半径</span>
+                <input id="outerBorderRadius" type="range" min="40" max="445" value="400" />
+                <output for="outerBorderRadius"></output>
+              </label>
+              <label>
+                <span>外边界粗细</span>
+                <input id="outerBorderStrokeWidth" type="range" min="0" max="24" step="0.5" value="0" />
+                <output for="outerBorderStrokeWidth"></output>
+              </label>
+              <label class="field-span-full">
+                <span>外边界内环</span>
+                <input id="innerOuterBorderEnabled" type="checkbox" />
+              </label>
+              <label data-inner-outer-border="on">
+                <span>内环半径</span>
+                <input id="innerOuterBorderRadius" type="range" min="40" max="445" value="388" />
+                <output for="innerOuterBorderRadius"></output>
+              </label>
+              <label data-inner-outer-border="on">
+                <span>内环粗细</span>
+                <input id="innerOuterBorderStrokeWidth" type="range" min="0.5" max="24" step="0.5" value="4" />
+                <output for="innerOuterBorderStrokeWidth"></output>
+              </label>
+            </div>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>外圈纹样</span>
+              <p>设置带状区域的纹样类型、密度和节奏。</p>
+            </div>
+            <div class="slider-grid">
+              <label class="field-span-full">
+                <span>外圈图案</span>
+                <select id="outerPatternType">
+                  <option value="none" selected>无</option>
+                  <option value="mesh">渔网纹</option>
+                  <option value="star">放射星纹</option>
+                </select>
+              </label>
+              <label>
+                <span>环数</span>
+                <input id="outerPatternRingCount" type="range" min="1" max="24" step="1" value="4" />
+                <output for="outerPatternRingCount"></output>
+              </label>
+              <label>
+                <span>角度等分</span>
+                <input id="outerPatternAngleDivisions" type="range" min="3" max="96" step="1" value="24" />
+                <output for="outerPatternAngleDivisions"></output>
+              </label>
+              <label>
+                <span>图案粗细</span>
+                <input id="outerPatternStrokeWidth" type="range" min="0.5" max="12" step="0.1" value="2.4" />
+                <output for="outerPatternStrokeWidth"></output>
+              </label>
+              <label>
+                <span>跳环</span>
+                <input id="outerPatternJumpSpan" type="range" min="1" max="8" step="1" value="1" />
+                <output for="outerPatternJumpSpan"></output>
+              </label>
+            </div>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>分隔线</span>
+              <p>控制槽位分割线的样式与粗细。</p>
+            </div>
+            <div class="slider-grid">
+              <label class="field-span-full">
+                <span>分隔样式</span>
+                <select id="dividerStyle">
+                  <option value="single" selected>单线</option>
+                  <option value="parallelDouble">平行双线</option>
+                  <option value="radialDouble">径向双线</option>
+                </select>
+              </label>
+              <label>
+                <span>分隔粗细</span>
+                <input id="dividerStrokeWidth" type="range" min="1" max="24" value="4" />
+                <output for="dividerStrokeWidth"></output>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group panel-card">
+          <div class="panel-head">
+            <span class="label-text">瓦当装饰</span>
+            <p>控制中心乳钉，以及环绕装饰使用钉或独立纹样。</p>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>中心装饰模式</span>
+              <p>在传统装饰和中心填字之间切换。</p>
+            </div>
+            <div class="slider-grid">
+              <label class="field-span-full">
+                <span>装饰模式</span>
+                <select id="centerDecorationMode">
+                  <option value="ornaments" selected>传统装饰</option>
+                  <option value="centerText">中心填字</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="panel-subcard" data-center-decoration="ornaments">
+            <div class="subcard-head">
+              <span>中心乳钉</span>
+              <p>定义中心乳钉本体以及它的边界环。</p>
+            </div>
+            <div class="slider-grid">
+              <label>
+                <span>中心乳钉</span>
+                <input id="centerNailRadius" type="range" min="0" max="90" value="18" />
+                <output for="centerNailRadius"></output>
+              </label>
+              <label class="field-span-full">
+                <span>乳钉边界环</span>
+                <input id="centerNailBoundaryEnabled" type="checkbox" />
+              </label>
+              <label data-center-nail-boundary="on">
+                <span>边界环半径</span>
+                <input id="centerNailBoundaryRadius" type="range" min="0" max="140" value="32" />
+                <output for="centerNailBoundaryRadius"></output>
+              </label>
+              <label data-center-nail-boundary="on">
+                <span>边界环粗细</span>
+                <input id="centerNailBoundaryStrokeWidth" type="range" min="0.5" max="24" step="0.5" value="4" />
+                <output for="centerNailBoundaryStrokeWidth"></output>
+              </label>
+            </div>
+          </div>
+          <div class="panel-subcard" data-center-decoration="ornaments">
+            <div class="subcard-head">
+              <span>环绕模式</span>
+              <p>选择用环绕钉还是纹样填充来组织外围装饰。</p>
+            </div>
+            <div class="slider-grid">
+              <label class="field-span-full">
+                <span>环绕装饰</span>
+                <select id="surroundDecorationMode">
+                  <option value="nails" selected>环绕钉</option>
+                  <option value="pattern">纹样填充</option>
+                </select>
+              </label>
+              <label>
+                <span>环绕半径</span>
+                <input id="surroundNailRadius" type="range" min="0" max="180" value="70" />
+                <output for="surroundNailRadius"></output>
+              </label>
+              <label data-surround-mode="nails">
+                <span>环绕钉大小</span>
+                <input id="surroundNailSize" type="range" min="0" max="40" value="10" />
+                <output for="surroundNailSize"></output>
+              </label>
+              <label data-surround-mode="nails">
+                <span>环绕钉数</span>
+                <input id="surroundNailCount" type="range" min="0" max="24" step="1" value="8" />
+                <output for="surroundNailCount"></output>
+              </label>
+              <label class="field-span-full" data-surround-mode="pattern">
+                <span>环绕纹样</span>
+                <select id="surroundPatternType">
+                  <option value="none">无</option>
+                  <option value="mesh" selected>渔网纹</option>
+                  <option value="star">放射星纹</option>
+                </select>
+              </label>
+              <label data-surround-mode="pattern">
+                <span>环绕带宽</span>
+                <input id="surroundPatternBandWidth" type="range" min="4" max="120" step="1" value="24" />
+                <output for="surroundPatternBandWidth"></output>
+              </label>
+              <label data-surround-mode="pattern">
+                <span>环数</span>
+                <input id="surroundPatternRingCount" type="range" min="1" max="16" step="1" value="3" />
+                <output for="surroundPatternRingCount"></output>
+              </label>
+              <label data-surround-mode="pattern">
+                <span>角度等分</span>
+                <input id="surroundPatternAngleDivisions" type="range" min="3" max="72" step="1" value="12" />
+                <output for="surroundPatternAngleDivisions"></output>
+              </label>
+              <label data-surround-mode="pattern">
+                <span>图案粗细</span>
+                <input id="surroundPatternStrokeWidth" type="range" min="0.5" max="12" step="0.1" value="2.0" />
+                <output for="surroundPatternStrokeWidth"></output>
+              </label>
+              <label data-surround-mode="pattern">
+                <span>跳环</span>
+                <input id="surroundPatternJumpSpan" type="range" min="1" max="6" step="1" value="1" />
+                <output for="surroundPatternJumpSpan"></output>
+              </label>
+            </div>
+          </div>
+          <div class="panel-subcard" data-center-decoration="centerText">
+            <div class="subcard-head">
+              <span>中心填字</span>
+              <p>单独控制中心字的长宽，并由内边界环内沿进行裁剪。</p>
+            </div>
+            <div class="slider-grid">
+              <label>
+                <span>中心字高度</span>
+                <input id="centerCellHeightScale" type="range" min="0.5" max="4" step="0.01" value="1" />
+                <output for="centerCellHeightScale"></output>
+              </label>
+              <label>
+                <span>中心字宽度</span>
+                <input id="centerCellWidthScale" type="range" min="0.5" max="4" step="0.01" value="1" />
+                <output for="centerCellWidthScale"></output>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group panel-card">
+          <div class="panel-head">
+            <span class="label-text">浮雕与导出</span>
+            <p>控制不同组件的浮雕高度、倒角与导出分辨率。</p>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>导出基础</span>
+              <p>先决定导出分辨率，再分别设置不同组件的浮雕参数。</p>
+            </div>
+            <div class="slider-grid">
+              <label class="field-span-full">
+                <span>分辨率</span>
+                <select id="exportResolution">
+                  <option value="320" selected>320</option>
+                  <option value="480">480</option>
+                  <option value="720">720</option>
+                  <option value="1080">1080</option>
+                </select>
+              </label>
+              <label>
+                <span>风化金石趣</span>
+                <input id="weatheringStrength" type="range" min="0" max="100" step="1" value="0" />
+                <output for="weatheringStrength"></output>
+              </label>
+            </div>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>文字与边界</span>
+              <p>统一调整主要视觉元素的浮雕高度和倒角。</p>
+            </div>
+            <div class="slider-grid">
+              <label class="field-span-full">
+                <span>文字</span>
+              </label>
+              <label>
+                <span>文字高度</span>
+                <input id="textReliefHeight" type="range" min="0.1" max="20" step="0.05" value="3" />
+                <output for="textReliefHeight"></output>
+              </label>
+              <label class="field-span-full">
+                <span>文字倒角</span>
+                <select id="textReliefBevelProfile">
+                  <option value="none" selected>无</option>
+                  <option value="bevel45">45度倒角</option>
+                  <option value="round">圆角</option>
+                  <option value="log">对数倒角</option>
+                </select>
+              </label>
+              <label>
+                <span>文字倒角尺寸</span>
+                <input id="textReliefBevelSize" type="range" min="0" max="12" step="0.05" value="0" />
+                <output for="textReliefBevelSize"></output>
+              </label>
+              <label class="field-span-full">
+                <span>边界</span>
+              </label>
+              <label>
+                <span>边界高度</span>
+                <input id="boundaryReliefHeight" type="range" min="0.1" max="20" step="0.05" value="3" />
+                <output for="boundaryReliefHeight"></output>
+              </label>
+              <label class="field-span-full">
+                <span>边界倒角</span>
+                <select id="boundaryReliefBevelProfile">
+                  <option value="none" selected>无</option>
+                  <option value="bevel45">45度倒角</option>
+                  <option value="round">圆角</option>
+                  <option value="log">对数倒角</option>
+                </select>
+              </label>
+              <label>
+                <span>边界倒角尺寸</span>
+                <input id="boundaryReliefBevelSize" type="range" min="0" max="12" step="0.05" value="0" />
+                <output for="boundaryReliefBevelSize"></output>
+              </label>
+              <label class="field-span-full">
+                <span>图案</span>
+              </label>
+              <label>
+                <span>图案高度</span>
+                <input id="patternReliefHeight" type="range" min="0.1" max="20" step="0.05" value="3" />
+                <output for="patternReliefHeight"></output>
+              </label>
+              <label class="field-span-full">
+                <span>图案倒角</span>
+                <select id="patternReliefBevelProfile">
+                  <option value="none" selected>无</option>
+                  <option value="bevel45">45度倒角</option>
+                  <option value="round">圆角</option>
+                  <option value="log">对数倒角</option>
+                </select>
+              </label>
+              <label>
+                <span>图案倒角尺寸</span>
+                <input id="patternReliefBevelSize" type="range" min="0" max="12" step="0.05" value="0" />
+                <output for="patternReliefBevelSize"></output>
+              </label>
+            </div>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>边框与乳钉</span>
+              <p>单独处理外边界、中心乳钉和环绕钉的立体效果。</p>
+            </div>
+            <div class="slider-grid">
+              <label class="field-span-full">
+                <span>外边界</span>
+              </label>
+              <label>
+                <span>外边界高度</span>
+                <input id="outerBorderReliefHeight" type="range" min="0.1" max="20" step="0.05" value="3" />
+                <output for="outerBorderReliefHeight"></output>
+              </label>
+              <label class="field-span-full">
+                <span>外边界倒角</span>
+                <select id="outerBorderReliefBevelProfile">
+                  <option value="none" selected>无</option>
+                  <option value="bevel45">45度倒角</option>
+                  <option value="round">圆角</option>
+                  <option value="log">对数倒角</option>
+                </select>
+              </label>
+              <label>
+                <span>外边界倒角尺寸</span>
+                <input id="outerBorderReliefBevelSize" type="range" min="0" max="12" step="0.05" value="0" />
+                <output for="outerBorderReliefBevelSize"></output>
+              </label>
+              <label class="field-span-full">
+                <span>中心乳钉</span>
+              </label>
+              <label>
+                <span>中心乳钉高度</span>
+                <input id="centerNailReliefHeight" type="range" min="0.1" max="20" step="0.05" value="3" />
+                <output for="centerNailReliefHeight"></output>
+              </label>
+              <label class="field-span-full">
+                <span>中心乳钉倒角</span>
+                <select id="centerNailReliefBevelProfile">
+                  <option value="none" selected>无</option>
+                  <option value="bevel45">45度倒角</option>
+                  <option value="round">圆角</option>
+                  <option value="log">对数倒角</option>
+                </select>
+              </label>
+              <label>
+                <span>中心乳钉倒角尺寸</span>
+                <input id="centerNailReliefBevelSize" type="range" min="0" max="12" step="0.05" value="0" />
+                <output for="centerNailReliefBevelSize"></output>
+              </label>
+              <label class="field-span-full" data-surround-relief="nails">
+                <span>环绕钉</span>
+              </label>
+              <label data-surround-relief="nails">
+                <span>环绕钉高度</span>
+                <input id="surroundNailReliefHeight" type="range" min="0.1" max="20" step="0.05" value="3" />
+                <output for="surroundNailReliefHeight"></output>
+              </label>
+              <label class="field-span-full" data-surround-relief="nails">
+                <span>环绕钉倒角</span>
+                <select id="surroundNailReliefBevelProfile">
+                  <option value="none" selected>无</option>
+                  <option value="bevel45">45度倒角</option>
+                  <option value="round">圆角</option>
+                  <option value="log">对数倒角</option>
+                </select>
+              </label>
+              <label data-surround-relief="nails">
+                <span>环绕钉倒角尺寸</span>
+                <input id="surroundNailReliefBevelSize" type="range" min="0" max="12" step="0.05" value="0" />
+                <output for="surroundNailReliefBevelSize"></output>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group panel-card">
+          <div class="panel-head">
+            <span class="label-text">显示与调试</span>
+            <p>显示辅助线和保留调试日志。</p>
+          </div>
+          <div class="toggle-grid">
+            <label class="checkbox">
+              <input id="showGuides" type="checkbox" />
+              <span>显示环形边界</span>
+            </label>
+            <label class="checkbox">
+              <input id="showGrid" type="checkbox" />
+              <span>环形网格</span>
+            </label>
+            <label class="checkbox">
+              <input id="showGlyphGrid" type="checkbox" />
+              <span>字体红色网格</span>
+            </label>
+            <label class="checkbox">
+              <input id="showAngleDebug" type="checkbox" />
+              <span>字符角度</span>
+            </label>
+            <label class="checkbox">
+              <input id="showOrnamentRings" type="checkbox" checked />
+              <span>成品边界</span>
+            </label>
+            <label class="checkbox">
+              <input id="alternateFlow" type="checkbox" />
+              <span>交替方向</span>
+            </label>
+          </div>
+          <div class="debug-panel">
+            <div class="debug-panel-head">
+              <span>调试日志</span>
+              <button class="tiny-button" id="clearLog" type="button">清空</button>
+            </div>
+            <pre id="debugLog" aria-live="polite"></pre>
+          </div>
+        </div>
+
+        <dl class="stats hidden-controls" aria-label="排版统计" aria-hidden="true">
+          <div>
+            <dt>已排字符</dt>
+            <dd id="placedCount">0</dd>
+          </div>
+          <div>
+            <dt>溢出字符</dt>
+            <dd id="overflowCount">0</dd>
+          </div>
+          <div>
+            <dt>行/列数</dt>
+            <dd id="trackCount">0</dd>
+          </div>
+        </dl>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
