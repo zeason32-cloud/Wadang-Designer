@@ -526,7 +526,6 @@ function ensureCellArrays(gridCount) {
     widthScale: clampCellScale(cellSettings[index]?.widthScale ?? 1),
     heightScale: clampCellScale(cellSettings[index]?.heightScale ?? 1),
     strokeWidth: getCellStrokeWidth(index),
-    radiusOffset: getCellRadiusOffset(index),
   }));
   const validOrder = cellOrder.filter((index) => index >= 0 && index < gridCount);
   const missingOrder = Array.from({ length: gridCount }, (_, index) => index).filter((index) => !validOrder.includes(index));
@@ -561,34 +560,6 @@ function getCellStrokeWidth(index) {
   return raw == null || !Number.isFinite(Number(raw)) ? null : clamp(Number(raw), 0, 10);
 }
 
-// 逐字径向偏移：把字在格内沿半径方向微调居中（智能均衡自动写入）。
-function getCellRadiusOffset(index) {
-  const raw = cellSettings[index]?.radiusOffset;
-  return Number.isFinite(Number(raw)) ? Number(raw) : 0;
-}
-
-// 字形真实墨色度量：对矢量轮廓采样后用鞋带公式求净填充面积（孔洞按反向缠绕自动相减），
-// 同时求轮廓周长（用于估算描边增加的黑色面积）。单位为字体单位，篆/简都按真实轮廓测量。
-// 返回 { fillArea, perimeter }；无真实轮廓的字（字体缺字）返回 fillArea = 0。
-function getGlyphInkMetrics(glyph) {
-  if (!glyph || !glyph.contours || !glyph.contours.length) return { fillArea: 0, perimeter: 0 };
-  const identity = (x, y) => ({ x, y });
-  let area = 0;
-  let perimeter = 0;
-  glyph.contours.forEach((contour) => {
-    const pts = sampleContour(contour, { x: 1, y: 1 }, 0, identity, 0);
-    let signed = 0;
-    for (let index = 0; index < pts.length; index += 1) {
-      const p = pts[index];
-      const q = pts[(index + 1) % pts.length];
-      signed += p.x * q.y - q.x * p.y;
-      perimeter += Math.hypot(q.x - p.x, q.y - p.y);
-    }
-    area += signed / 2;
-  });
-  return { fillArea: Math.abs(area), perimeter };
-}
-
 // 在全局字形比例的基础上叠加单个槽位的宽/高倍数与（可选）逐字描边，得到该字专用的渲染状态。
 function getCellScaledState(state, sourceIndex) {
   const setting = state.cellSettings?.[sourceIndex];
@@ -605,59 +576,7 @@ function getCellScaledState(state, sourceIndex) {
   };
 }
 
-// 智能均衡：以“格的矢量边界”为约束，把每个字拟合进所在格（含分隔线/内外环导致的边界收缩），
-// 径向居中、限幅各向异性，并按“黑色占该格白底的比重”（真实轮廓面积/格面积，而非包围盒）
-// 微调大小与描边，使各格黑白比例趋于一致。
-const SMART_BALANCE = {
-  FILL: 0.84, // 包围盒占格的比例，留出与格边界的安全间隙
-  ANISO: 1.12, // 长宽各向异性上限（保护可读性）
-  DENSITY_MIN: 0.82, // 墨色过密的字最多缩小到此倍率（不放大以免溢出格）
-};
-
-function ringSectorArea(innerRadius, outerRadius, sweepAngleDeg) {
-  return (Math.abs(sweepAngleDeg) * Math.PI) / 180 / 2 * (outerRadius * outerRadius - innerRadius * innerRadius);
-}
-
-function collectSmartBalanceInfo(state, font) {
-  const baseState = { ...state, fontWidthScale: 1, fontHeightScale: 1 };
-  const gridCount = getRadialRingGridCount(state);
-  const slotAngle = getRadialRingSlotAngle(state, gridCount);
-  const infos = [];
-  for (let index = 0; index < gridCount; index += 1) {
-    const char = state.cells?.[index];
-    if (!char) {
-      infos.push(null);
-      continue;
-    }
-    const glyph = font.getGlyph(char);
-    const ink = getGlyphInkMetrics(glyph);
-    const metrics = getGlyphVisualMetrics(glyph, font, baseState);
-    // 字体缺字（无真实轮廓）或度量异常 → 跳过该格，不动它的设置。
-    if (!(ink.fillArea > 0) || !(metrics.width > 0) || !(metrics.height > 0)) {
-      infos.push(null);
-      continue;
-    }
-    const slot = buildInsetSlotGeometry(
-      state,
-      state.startAngle + index * slotAngle,
-      state.startAngle + (index + 1) * slotAngle,
-    );
-    const midRadius = (slot.innerRadius + slot.outerRadius) / 2;
-    infos.push({
-      index,
-      char,
-      metrics,
-      inkFillArea: ink.fillArea, // 字体单位²
-      inkPerimeter: ink.perimeter, // 字体单位
-      midRadius,
-      radialCap: Math.max(1, slot.outerRadius - slot.innerRadius),
-      angularArcCap: Math.max(1, (Math.abs(slot.sweepAngle) * Math.PI) / 180 * midRadius),
-      cellArea: Math.max(1, ringSectorArea(slot.innerRadius, slot.outerRadius, slot.sweepAngle)),
-    });
-  }
-  return infos;
-}
-
+// 智能均衡：按每个字的自然视觉大小，自动计算 uniform 逐字比例，使各字视觉大小趋于一致。
 function smartBalanceCellScales() {
   const state = readState();
   const font = getVectorFont(state);
@@ -665,83 +584,32 @@ function smartBalanceCellScales() {
     modeSummary.textContent = "当前字体尚未解析为矢量轮廓，无法智能均衡。";
     return;
   }
-  if (state.mode !== "radialRing") {
-    modeSummary.textContent = "智能均衡仅适用于“环向成环”排版。";
-    return;
-  }
-  const vertical = state.ringOrientation !== "horizontal";
-  const baseGlyphScale = state.fontSize / font.unitsPerEm; // 字体单位 → 画板像素
-  const infos = collectSmartBalanceInfo(state, font);
-  const valid = infos.filter(Boolean);
+  const baseState = { ...state, fontWidthScale: 1, fontHeightScale: 1 };
+  const gridCount = getRadialRingGridCount(state);
+  const extents = Array.from({ length: gridCount }, (_, index) => {
+    const char = state.cells?.[index];
+    if (!char) return null;
+    const metrics = getGlyphVisualMetrics(font.getGlyph(char), font, baseState);
+    const extent = Math.max(metrics.width, metrics.height);
+    return extent > 0 ? extent : null;
+  });
+  const valid = extents.filter((extent) => extent);
   if (!valid.length) {
-    modeSummary.textContent = "没有可均衡的字（请确认字体包含这些字）。";
+    modeSummary.textContent = "没有可均衡的字。";
     return;
   }
-
-  const { FILL, ANISO, DENSITY_MIN } = SMART_BALANCE;
-
-  // 第一遍：按格边界做几何拟合（限幅各向异性），得到每字初始缩放与该字在格中的墨色覆盖率。
-  const fitted = valid.map((info) => {
-    const radialNatural = vertical ? info.metrics.width : info.metrics.height;
-    const angularNatural = vertical ? info.metrics.height : info.metrics.width;
-    const sRadial = (info.radialCap * FILL) / Math.max(1e-3, radialNatural);
-    const sAngular = (info.angularArcCap * FILL) / Math.max(1e-3, angularNatural);
-    const sUniform = Math.min(sRadial, sAngular); // 几何上限：保证不越界
-    const radialFactor = clamp(Math.min(sRadial / sUniform, ANISO), 1, ANISO);
-    const angularFactor = clamp(Math.min(sAngular / sUniform, ANISO), 1, ANISO);
-    const widthScale0 = vertical ? sUniform * radialFactor : sUniform * angularFactor;
-    const heightScale0 = vertical ? sUniform * angularFactor : sUniform * radialFactor;
-    // 黑色占该格的比重 = 拟合后字的填充面积 / 格面积（用真实轮廓面积，而不是包围盒）。
-    const fittedFillArea = info.inkFillArea * baseGlyphScale * baseGlyphScale * widthScale0 * heightScale0;
-    const coverage = fittedFillArea / info.cellArea;
-    return { info, widthScale0, heightScale0, coverage };
-  });
-
-  // 目标黑白比例 = 各格覆盖率的中位数。
-  const coverages = fitted.map((f) => f.coverage).filter((c) => c > 0).sort((a, b) => a - b);
-  const targetCoverage = coverages.length ? coverages[Math.floor(coverages.length / 2)] : 0;
-
+  const target = valid.reduce((sum, extent) => sum + extent, 0) / valid.length;
   let count = 0;
-  const debugRows = [];
-  fitted.forEach(({ info, widthScale0, heightScale0, coverage }) => {
-    // 偏密的字（覆盖率高于目标）适度缩小；偏疏的字保持几何上限（不放大以免溢出格）。
-    const densityScale =
-      targetCoverage > 0 && coverage > 0 ? clamp(Math.sqrt(targetCoverage / coverage), DENSITY_MIN, 1) : 1;
-    const widthScale = clampCellScale(widthScale0 * densityScale);
-    const heightScale = clampCellScale(heightScale0 * densityScale);
-
-    // 径向居中：把字移到格中点半径，使内外两侧间隙相等。
-    const radiusOffset = Number((info.midRadius - state.centerRadius).toFixed(2));
-
-    // 描边补偿：用描边把仍偏疏的格补到目标覆盖率。描边宽 s 沿周长 P 增加约 P·s 的黑色面积。
-    const finalCoverage = coverage * densityScale * densityScale;
-    const fittedPerimeter =
-      info.inkPerimeter * baseGlyphScale * Math.sqrt(Math.max(1e-3, widthScale * heightScale));
-    const neededArea = Math.max(0, (targetCoverage - finalCoverage) * info.cellArea);
-    const strokeWidth = Number(clamp(neededArea / Math.max(1, fittedPerimeter), 0, 10).toFixed(2));
-
-    cellSettings[info.index] = {
-      ...cellSettings[info.index],
-      widthScale,
-      heightScale,
-      radiusOffset,
-      strokeWidth,
-    };
+  extents.forEach((extent, index) => {
+    if (!extent) return;
+    const factor = clampCellScale(target / extent);
+    cellSettings[index] = { ...cellSettings[index], widthScale: factor, heightScale: factor };
     count += 1;
-    debugRows.push({
-      char: info.char,
-      cover: Number(coverage.toFixed(3)),
-      w: Number(widthScale.toFixed(2)),
-      h: Number(heightScale.toFixed(2)),
-      r: radiusOffset,
-      s: strokeWidth,
-    });
   });
-
   buildCellInputs();
   render();
-  modeSummary.textContent = `已智能均衡 ${count} 个字（按格边界拟合 + 黑白比例调整）。`;
-  logDebug("智能均衡", { targetCoverage: Number(targetCoverage.toFixed(3)), vertical, cells: debugRows });
+  modeSummary.textContent = `已按字形大小智能均衡 ${count} 个字。`;
+  logDebug("智能均衡", { target: Number(target.toFixed(2)), count });
 }
 
 function commitCellInput(input, index, moveNext = false) {
@@ -1121,7 +989,6 @@ function readState() {
     widthScale: getCellWidthScale(index),
     heightScale: getCellHeightScale(index),
     strokeWidth: getCellStrokeWidth(index),
-    radiusOffset: getCellRadiusOffset(index),
   }));
   const readingOrder = cellOrder.filter((index) => index >= 0 && index < gridCount);
   const readingText = readingOrder.map((index) => cells[index] || "").filter(Boolean).join("");
@@ -1629,7 +1496,6 @@ function applyLayoutConfig(layout) {
         settings?.strokeWidth == null || !Number.isFinite(Number(settings.strokeWidth))
           ? null
           : clamp(Number(settings.strokeWidth), 0, 10),
-      radiusOffset: Number.isFinite(Number(settings?.radiusOffset)) ? Number(settings.radiusOffset) : 0,
     }));
   }
   const savedCellOrder = Array.isArray(layout.cellOrder) ? layout.cellOrder : parameters.cellOrder;
@@ -3770,7 +3636,6 @@ function layoutRadialRing(state) {
     if (!cell.char) return;
     placed += 1;
     const cellState = getCellScaledState(state, cell.sourceIndex);
-    const cellRadius = Math.max(1, layoutRadius + getCellRadiusOffset(cell.sourceIndex));
     const glyph = font.getGlyph(cell.char);
     const metrics = getGlyphVisualMetrics(glyph, font, cellState);
     let startAngle = cell.slotStartAngle;
@@ -3812,12 +3677,12 @@ function layoutRadialRing(state) {
           glyphVisualHeight: metrics.height,
         },
         cellState,
-        cellRadius,
+        layoutRadius,
       );
       const blankAngle = Math.max(0, model.geometry.slotAngle - charAngle);
       startAngle = cell.slotStartAngle + blankAngle / 2;
       endAngle = startAngle + charAngle;
-      const mapPoint = getRadialRingMapPoint(cell, cellState, cellRadius);
+      const mapPoint = getRadialRingMapPoint(cell, cellState, layoutRadius);
       appendGlyphPath(
         cell.char,
         font,
@@ -3839,8 +3704,8 @@ function layoutRadialRing(state) {
         });
       } else {
         const debugHalfRadial = getScaledFontHeight(cellState) / 2;
-        const debugHalfArc = (model.geometry.slotAngle * Math.PI * cellRadius) / 360;
-        const mapPoint = getRadialRingMapPoint(cell, cellState, cellRadius);
+        const debugHalfArc = (model.geometry.slotAngle * Math.PI * layoutRadius) / 360;
+        const mapPoint = getRadialRingMapPoint(cell, cellState, layoutRadius);
         hitPath = createSvgElement("path", {
           class: "angle-hit-area",
           d: mappedRectPath(

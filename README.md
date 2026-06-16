@@ -34,9 +34,8 @@ https://zeason32-cloud.github.io/Wadang-Designer/index.html?debug=true
 
 - Ring text layout with live 2D preview and Three.js 3D relief preview.
 - Unified in-flow action bar (match text · auto-match · export resolution · export STL) shared by the simplified and debug views — no floating controls.
-- Per-character glyph proportion: each ring slot has its own width / height / stroke / radius-offset on top of the global values, applied to the 2D preview, 3D relief, and STL export.
-- Smart balance: fits each glyph to its actual cell boundary (accounts for single/double dividers and ring stroke), centers it radially, applies limited anisotropy for readability, and equalizes the black/white ratio per cell by measuring real outline ink area (not just the bounding box) — tuning size and stroke. Outline-driven, so seal-script and simplified glyphs are handled by measurement, not assumption.
-- Print-grade STL export: binary STL, up to 2048 resolution with denser meshing, physical diameter (mm) scaling, and adjustable base thickness.
+- Per-character glyph proportion: each ring slot has its own width / height scale (0.5–4×) on top of the global scale, applied to the 2D preview, 3D relief, and STL export.
+- Browser-side STL export of the generated relief.
 - Import / save JSON layout configs (per-character settings are persisted).
 
 ## Scope
