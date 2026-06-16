@@ -62,6 +62,8 @@ const controls = {
   centerCellHeightScale: document.querySelector("#centerCellHeightScale"),
   centerCellWidthScale: document.querySelector("#centerCellWidthScale"),
   exportResolution: document.querySelector("#exportResolution"),
+  exportDiameterMm: document.querySelector("#exportDiameterMm"),
+  baseThickness: document.querySelector("#baseThickness"),
   weatheringStrength: document.querySelector("#weatheringStrength"),
   rubbingKernelRadius: document.querySelector("#rubbingKernelRadius"),
   rubbingInkStrength: document.querySelector("#rubbingInkStrength"),
@@ -115,6 +117,7 @@ const controls = {
   showOrnamentRings: document.querySelector("#showOrnamentRings"),
   alternateFlow: document.querySelector("#alternateFlow"),
   autoRing: document.querySelector("#autoRing"),
+  smartBalance: document.querySelector("#smartBalance"),
   centerRing: document.querySelector("#centerRing"),
   clearLog: document.querySelector("#clearLog"),
   loadLayout: document.querySelector("#loadLayout"),
@@ -226,7 +229,7 @@ const CLAY_TEXTURES = {
   bump: "./assets/materials/clay001/Clay001_1K-PNG_Displacement.png",
 };
 const STUDIO_ENVIRONMENT_URL = "./assets/hdr/studio_small_08_panorama_2k.jpg";
-const RESOLUTION_OPTIONS = [320, 480, 720, 1080];
+const RESOLUTION_OPTIONS = [320, 480, 720, 1080, 1440, 2048];
 const SEARCH_PARAMS = new URLSearchParams(window.location.search);
 const DEBUG_UI_MODE = SEARCH_PARAMS.get("debug") === "true";
 const INSPECT_MODE = SEARCH_PARAMS.get("inspect") === "1";
@@ -522,6 +525,7 @@ function ensureCellArrays(gridCount) {
     flow: cellSettings[index]?.flow === "ccw" ? "ccw" : "cw",
     widthScale: clampCellScale(cellSettings[index]?.widthScale ?? 1),
     heightScale: clampCellScale(cellSettings[index]?.heightScale ?? 1),
+    strokeWidth: getCellStrokeWidth(index),
   }));
   const validOrder = cellOrder.filter((index) => index >= 0 && index < gridCount);
   const missingOrder = Array.from({ length: gridCount }, (_, index) => index).filter((index) => !validOrder.includes(index));
@@ -550,17 +554,62 @@ function getCellHeightScale(index) {
   return clampCellScale(cellSettings[index]?.heightScale ?? 1);
 }
 
-// 在全局字形比例的基础上叠加单个槽位的宽/高倍数，得到该字专用的渲染状态。
+// 逐字描边：返回该格的绝对描边值；null/undefined 表示继承全局。
+function getCellStrokeWidth(index) {
+  const raw = cellSettings[index]?.strokeWidth;
+  return raw == null || !Number.isFinite(Number(raw)) ? null : clamp(Number(raw), 0, 10);
+}
+
+// 在全局字形比例的基础上叠加单个槽位的宽/高倍数与（可选）逐字描边，得到该字专用的渲染状态。
 function getCellScaledState(state, sourceIndex) {
   const setting = state.cellSettings?.[sourceIndex];
   const w = Number(setting?.widthScale) || 1;
   const h = Number(setting?.heightScale) || 1;
-  if (w === 1 && h === 1) return state;
+  const rawStroke = setting?.strokeWidth;
+  const hasStroke = rawStroke != null && Number.isFinite(Number(rawStroke));
+  if (w === 1 && h === 1 && !hasStroke) return state;
   return {
     ...state,
     fontWidthScale: (state.fontWidthScale || 1) * w,
     fontHeightScale: (state.fontHeightScale || 1) * h,
+    ...(hasStroke ? { glyphStrokeWidth: clamp(Number(rawStroke), 0, 10) } : {}),
   };
+}
+
+// 智能均衡：按每个字的自然视觉大小，自动计算 uniform 逐字比例，使各字视觉大小趋于一致。
+function smartBalanceCellScales() {
+  const state = readState();
+  const font = getVectorFont(state);
+  if (!font) {
+    modeSummary.textContent = "当前字体尚未解析为矢量轮廓，无法智能均衡。";
+    return;
+  }
+  const baseState = { ...state, fontWidthScale: 1, fontHeightScale: 1 };
+  const gridCount = getRadialRingGridCount(state);
+  const extents = Array.from({ length: gridCount }, (_, index) => {
+    const char = state.cells?.[index];
+    if (!char) return null;
+    const metrics = getGlyphVisualMetrics(font.getGlyph(char), font, baseState);
+    const extent = Math.max(metrics.width, metrics.height);
+    return extent > 0 ? extent : null;
+  });
+  const valid = extents.filter((extent) => extent);
+  if (!valid.length) {
+    modeSummary.textContent = "没有可均衡的字。";
+    return;
+  }
+  const target = valid.reduce((sum, extent) => sum + extent, 0) / valid.length;
+  let count = 0;
+  extents.forEach((extent, index) => {
+    if (!extent) return;
+    const factor = clampCellScale(target / extent);
+    cellSettings[index] = { ...cellSettings[index], widthScale: factor, heightScale: factor };
+    count += 1;
+  });
+  buildCellInputs();
+  render();
+  modeSummary.textContent = `已按字形大小智能均衡 ${count} 个字。`;
+  logDebug("智能均衡", { target: Number(target.toFixed(2)), count });
 }
 
 function commitCellInput(input, index, moveNext = false) {
@@ -709,9 +758,39 @@ function buildCellInputs() {
       field.append(cap, num);
       return field;
     };
+    // 描边：空 = 继承全局；填值 = 该字绝对描边（0–10）。
+    const makeStrokeField = () => {
+      const field = document.createElement("label");
+      field.className = "cell-scale-field";
+      const cap = document.createElement("small");
+      cap.textContent = "描边";
+      const num = document.createElement("input");
+      num.type = "number";
+      num.min = "0";
+      num.max = "10";
+      num.step = "0.05";
+      const current = getCellStrokeWidth(slotIndex);
+      num.value = current == null ? "" : String(current);
+      num.placeholder = `继承 ${Number(controls.glyphStrokeWidth?.value || 0)}`;
+      num.className = "cell-scale-input";
+      num.setAttribute("aria-label", `第 ${slotIndex + 1} 格描边`);
+      num.draggable = false;
+      num.addEventListener("pointerdown", (event) => event.stopPropagation());
+      num.addEventListener("change", () => {
+        const trimmed = num.value.trim();
+        const next = trimmed === "" ? null : clamp(Number(trimmed), 0, 10);
+        num.value = next == null ? "" : String(next);
+        cellSettings[slotIndex] = { ...cellSettings[slotIndex], strokeWidth: next };
+        logDebug("单字描边", { index: slotIndex, value: next });
+        render();
+      });
+      field.append(cap, num);
+      return field;
+    };
     scaleRow.append(
       makeScaleField("width", "宽", getCellWidthScale(slotIndex)),
       makeScaleField("height", "高", getCellHeightScale(slotIndex)),
+      makeStrokeField(),
     );
 
     label.append(span, input, directionSelect, scaleRow);
@@ -909,6 +988,7 @@ function readState() {
     flow: getCellFlow(index),
     widthScale: getCellWidthScale(index),
     heightScale: getCellHeightScale(index),
+    strokeWidth: getCellStrokeWidth(index),
   }));
   const readingOrder = cellOrder.filter((index) => index >= 0 && index < gridCount);
   const readingText = readingOrder.map((index) => cells[index] || "").filter(Boolean).join("");
@@ -951,6 +1031,8 @@ function readState() {
     exportResolution: RESOLUTION_OPTIONS.includes(Number(controls.exportResolution.value))
       ? Number(controls.exportResolution.value)
       : 320,
+    exportDiameterMm: Math.max(0, Number(controls.exportDiameterMm?.value || 0)),
+    baseThickness: Math.max(1, Number(controls.baseThickness?.value || RELIEF_BASE_THICKNESS)),
     weatheringStrength: Number(controls.weatheringStrength?.value || 0),
     rubbingKernelRadius: Math.max(1, Math.round(Number(controls.rubbingKernelRadius?.value || 4))),
     rubbingInkStrength: Number(controls.rubbingInkStrength?.value || 92),
@@ -1410,6 +1492,10 @@ function applyLayoutConfig(layout) {
       flow: settings?.flow === "ccw" || Number(settings?.direction || 0) === 180 ? "ccw" : "cw",
       widthScale: clampCellScale(settings?.widthScale ?? 1),
       heightScale: clampCellScale(settings?.heightScale ?? 1),
+      strokeWidth:
+        settings?.strokeWidth == null || !Number.isFinite(Number(settings.strokeWidth))
+          ? null
+          : clamp(Number(settings.strokeWidth), 0, 10),
     }));
   }
   const savedCellOrder = Array.isArray(layout.cellOrder) ? layout.cellOrder : parameters.cellOrder;
@@ -1448,6 +1534,8 @@ function applyLayoutConfig(layout) {
     "centerCellHeightScale",
     "centerCellWidthScale",
     "exportResolution",
+    "exportDiameterMm",
+    "baseThickness",
     "weatheringStrength",
     "rubbingKernelRadius",
     "rubbingInkStrength",
@@ -3821,6 +3909,8 @@ function getCurrentLayoutSnapshot() {
       centerCellHeightScale: state.centerCellHeightScale,
       centerCellWidthScale: state.centerCellWidthScale,
       exportResolution: state.exportResolution,
+      exportDiameterMm: state.exportDiameterMm,
+      baseThickness: state.baseThickness,
       weatheringStrength: state.weatheringStrength,
       rubbingKernelRadius: state.rubbingKernelRadius,
       rubbingInkStrength: state.rubbingInkStrength,
@@ -5351,6 +5441,7 @@ function buildReliefMeshFromHeightmap(heightmap, state) {
     : canvas.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, width, height).data;
   const scale = 900 / (width - 1);
   const heightValue = getMaxReliefHeight(state);
+  const baseThickness = Number(state.baseThickness) > 0 ? Number(state.baseThickness) : RELIEF_BASE_THICKNESS;
   const outerRadius = Math.max(1, Math.min(445, getEffectiveBaseOuterRadius(state)));
   const positions = [];
   const indices = [];
@@ -5389,10 +5480,10 @@ function buildReliefMeshFromHeightmap(heightmap, state) {
     const bottom = g01 * (1 - tx) + g11 * tx;
     return top * (1 - ty) + bottom * ty;
   };
-  const angularSegments = Math.max(192, Math.min(960, Math.round(width * 0.75)));
-  const radialSegments = Math.max(96, Math.min(420, Math.round(width * 0.35)));
+  const angularSegments = Math.max(192, Math.min(1600, Math.round(width * 0.75)));
+  const radialSegments = Math.max(96, Math.min(700, Math.round(width * 0.35)));
   const topCenter = addVertex(0, 0, sampleGrayAtWorld(0, 0));
-  const bottomCenter = addVertex(0, 0, -RELIEF_BASE_THICKNESS);
+  const bottomCenter = addVertex(0, 0, -baseThickness);
   const topRings = [];
 
   for (let radialIndex = 1; radialIndex <= radialSegments; radialIndex += 1) {
@@ -5430,7 +5521,7 @@ function buildReliefMeshFromHeightmap(heightmap, state) {
     const angle = (angleIndex / angularSegments) * Math.PI * 2;
     const x = Math.cos(angle) * outerRadius;
     const y = Math.sin(angle) * outerRadius;
-    bottomRing.push(addVertex(x, y, -RELIEF_BASE_THICKNESS));
+    bottomRing.push(addVertex(x, y, -baseThickness));
   }
 
   for (let angleIndex = 0; angleIndex < angularSegments; angleIndex += 1) {
@@ -5446,6 +5537,7 @@ function buildReliefMeshFromHeightmap(heightmap, state) {
     heightValue,
     reliefComponents: Object.fromEntries(RELIEF_COMPONENTS.map((component) => [component.key, getReliefComponentSettings(state, component.key)])),
     glyphStrokeWidth: Number(state.glyphStrokeWidth || 0),
+    baseThickness,
     outerRadius,
     angularSegments,
     radialSegments,
@@ -5468,7 +5560,7 @@ function heightmapCanvasToObj(canvas, state) {
     `# base outer radius ${mesh.outerRadius}`,
     `# angular segments ${mesh.angularSegments}`,
     `# radial segments ${mesh.radialSegments}`,
-    `# base thickness ${RELIEF_BASE_THICKNESS}`,
+    `# base thickness ${mesh.baseThickness}`,
   ];
 
   for (let index = 0; index < mesh.positions.length; index += 3) {
@@ -5529,6 +5621,55 @@ function reliefMeshToAsciiStl(mesh, solidName = "watang_relief") {
   return `${lines.join("\n")}\n`;
 }
 
+// 二进制 STL：80 字节头 + 4 字节三角数 + 每面 50 字节（法线12 + 3顶点36 + 属性2）。
+// scale 用于把画板单位统一缩放到目标物理尺寸（mm）。
+function reliefMeshToBinaryStl(mesh, scale = 1) {
+  const triangleCount = mesh.indices.length / 3;
+  const buffer = new ArrayBuffer(84 + triangleCount * 50);
+  const view = new DataView(buffer);
+  view.setUint32(80, triangleCount, true);
+  let offset = 84;
+  for (let index = 0; index < mesh.indices.length; index += 3) {
+    const ia = mesh.indices[index] * 3;
+    const ib = mesh.indices[index + 1] * 3;
+    const ic = mesh.indices[index + 2] * 3;
+    const ax = mesh.positions[ia] * scale;
+    const ay = mesh.positions[ia + 1] * scale;
+    const az = mesh.positions[ia + 2] * scale;
+    const bx = mesh.positions[ib] * scale;
+    const by = mesh.positions[ib + 1] * scale;
+    const bz = mesh.positions[ib + 2] * scale;
+    const cx = mesh.positions[ic] * scale;
+    const cy = mesh.positions[ic + 1] * scale;
+    const cz = mesh.positions[ic + 2] * scale;
+    const [nx, ny, nz] = computeTriangleNormal(ax, ay, az, bx, by, bz, cx, cy, cz);
+    view.setFloat32(offset, nx, true);
+    view.setFloat32(offset + 4, ny, true);
+    view.setFloat32(offset + 8, nz, true);
+    view.setFloat32(offset + 12, ax, true);
+    view.setFloat32(offset + 16, ay, true);
+    view.setFloat32(offset + 20, az, true);
+    view.setFloat32(offset + 24, bx, true);
+    view.setFloat32(offset + 28, by, true);
+    view.setFloat32(offset + 32, bz, true);
+    view.setFloat32(offset + 36, cx, true);
+    view.setFloat32(offset + 40, cy, true);
+    view.setFloat32(offset + 44, cz, true);
+    view.setUint16(offset + 48, 0, true);
+    offset += 50;
+  }
+  return buffer;
+}
+
+// 目标直径(mm) > 0 时，把画板坐标统一缩放到真实物理尺寸；否则保持画板尺度。
+function getExportScale(state, mesh) {
+  const diameterMm = Number(state.exportDiameterMm) || 0;
+  if (diameterMm <= 0) return 1;
+  const baseOuter = mesh?.outerRadius || getEffectiveBaseOuterRadius(state);
+  if (!(baseOuter > 0)) return 1;
+  return diameterMm / (2 * baseOuter);
+}
+
 async function downloadReliefObj() {
   const state = readState();
   const resolution = getExportResolution(state);
@@ -5565,16 +5706,21 @@ async function downloadReliefStl() {
   try {
     const heightmap = await buildHeightmapCanvas(state, resolution);
     const mesh = buildReliefMeshFromHeightmap(heightmap, state);
-    const stl = reliefMeshToAsciiStl(mesh, "watang_relief");
-    downloadBlob(new Blob([stl], { type: "model/stl;charset=utf-8" }), "ring-text-relief-test.stl");
-    modeSummary.textContent = "已导出 STL。";
+    const exportScale = getExportScale(state, mesh);
+    const stl = reliefMeshToBinaryStl(mesh, exportScale);
+    downloadBlob(new Blob([stl], { type: "model/stl" }), "ring-text-relief.stl");
+    const diameterMm = Number(state.exportDiameterMm) || 0;
+    modeSummary.textContent = diameterMm > 0 ? `已导出二进制 STL（直径 ${diameterMm}mm）。` : "已导出二进制 STL。";
     logDebug("导出 STL", {
+      format: "binary",
       meshSize: resolution,
       internalSize: getHeightmapInternalResolution(resolution),
       height: mesh.heightValue,
       components: mesh.reliefComponents,
       glyphStrokeWidth: mesh.glyphStrokeWidth,
-      baseThickness: RELIEF_BASE_THICKNESS,
+      baseThickness: mesh.baseThickness,
+      exportScale: Number(exportScale.toFixed(4)),
+      diameterMm,
       outerRadius: Number(mesh.outerRadius.toFixed(2)),
       angularSegments: mesh.angularSegments,
       radialSegments: mesh.radialSegments,
@@ -5714,7 +5860,7 @@ async function ensureThreePreview() {
   floor.receiveShadow = true;
   scene.add(floor);
 
-  Object.assign(reliefPreview, { scene, camera, renderer, controls });
+  Object.assign(reliefPreview, { scene, camera, renderer, controls, floor });
   resizeThreePreview();
   return reliefPreview;
 }
@@ -5820,6 +5966,10 @@ function updateThreeReliefMesh(mesh, preview) {
   object.receiveShadow = true;
   reliefPreview.scene.add(object);
   reliefPreview.meshObject = object;
+  if (reliefPreview.floor) {
+    const baseThickness = Number(mesh.baseThickness) > 0 ? Number(mesh.baseThickness) : RELIEF_BASE_THICKNESS;
+    reliefPreview.floor.position.z = -baseThickness - 3.2;
+  }
 }
 
 function renderThreePreviewFrame() {
@@ -6051,6 +6201,7 @@ Object.values(controls).forEach((control) => {
     control.id === "saveLayoutAs" ||
     control.id === "fontFile" ||
     control.id === "autoRing" ||
+    control.id === "smartBalance" ||
     control.id === "centerRing" ||
     control.id === "clearLog" ||
     control.id === "rotationAngle" ||
@@ -6134,6 +6285,7 @@ window.addEventListener("pointerdown", handleSecretFontTap, { capture: true, pas
 window.addEventListener("mousedown", handleSecretFontTap, { capture: true, passive: true });
 window.addEventListener("touchstart", handleSecretFontTap, { capture: true, passive: true });
 controls.autoRing?.addEventListener("click", autoFitSingleRing);
+controls.smartBalance?.addEventListener("click", smartBalanceCellScales);
 controls.outerPatternType?.addEventListener("change", enforceEvenOuterPatternAngleDivisions);
 controls.centerDecorationMode?.addEventListener("change", () => {
   updateDecorationControlState();

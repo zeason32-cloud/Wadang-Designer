@@ -91,6 +91,8 @@
                 <option value="480">480</option>
                 <option value="720">720</option>
                 <option value="1080">1080</option>
+                <option value="1440">1440</option>
+                <option value="2048">2048</option>
               </select>
             </label>
             <button class="result-action-button" id="resultExportStl" type="button" aria-label="导出 STL 文件">导出 STL</button>
@@ -178,6 +180,7 @@
               </label>
               <button class="primary-action compact-action" id="autoRing" type="button">一键成环</button>
             </div>
+            <button class="tiny-button cell-balance-button" id="smartBalance" type="button" title="按字形大小自动均衡逐字比例">智能均衡字形大小</button>
             <div class="cell-input-grid" id="cellInputs" aria-label="按格填字"></div>
           </div>
         </div>
@@ -573,6 +576,22 @@
           <div class="panel-head">
             <span class="label-text">浮雕参数</span>
             <p>控制不同组件的浮雕高度与倒角。导出分辨率在底部操作栏选择。</p>
+          </div>
+          <div class="panel-subcard">
+            <div class="subcard-head">
+              <span>打印导出</span>
+              <p>设置 3D 打印的物理直径与底板厚度；导出为二进制 STL。</p>
+            </div>
+            <div class="slider-grid">
+              <label>
+                <span>直径(mm，0=画板尺度)</span>
+                <input id="exportDiameterMm" type="number" min="0" max="600" step="1" value="0" />
+              </label>
+              <label>
+                <span>底板厚度</span>
+                <input id="baseThickness" type="number" min="4" max="120" step="1" value="44" />
+              </label>
+            </div>
           </div>
           <div class="panel-subcard">
             <div class="subcard-head">

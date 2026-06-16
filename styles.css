@@ -1028,15 +1028,15 @@ button:focus-visible {
 .cell-scale-row {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
 }
 
 .cell-scale-field {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   cursor: default;
 }
 
@@ -1054,6 +1054,11 @@ button:focus-visible {
   border-radius: 8px;
   color: var(--ink);
   background: #ffffff;
+}
+
+.cell-balance-button {
+  width: 100%;
+  margin-bottom: 10px;
 }
 
 .debug-panel {
