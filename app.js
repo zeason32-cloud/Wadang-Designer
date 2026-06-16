@@ -520,6 +520,8 @@ function ensureCellArrays(gridCount) {
   cellValues = Array.from({ length: gridCount }, (_, index) => cellValues[index] || "");
   cellSettings = Array.from({ length: gridCount }, (_, index) => ({
     flow: cellSettings[index]?.flow === "ccw" ? "ccw" : "cw",
+    widthScale: clampCellScale(cellSettings[index]?.widthScale ?? 1),
+    heightScale: clampCellScale(cellSettings[index]?.heightScale ?? 1),
   }));
   const validOrder = cellOrder.filter((index) => index >= 0 && index < gridCount);
   const missingOrder = Array.from({ length: gridCount }, (_, index) => index).filter((index) => !validOrder.includes(index));
@@ -532,6 +534,33 @@ function getCellFlow(index) {
 
 function getCellFlowSign(indexOrFlow) {
   return indexOrFlow === "ccw" || getCellFlow(indexOrFlow) === "ccw" ? -1 : 1;
+}
+
+function clampCellScale(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return clamp(n, 0.5, 4);
+}
+
+function getCellWidthScale(index) {
+  return clampCellScale(cellSettings[index]?.widthScale ?? 1);
+}
+
+function getCellHeightScale(index) {
+  return clampCellScale(cellSettings[index]?.heightScale ?? 1);
+}
+
+// 在全局字形比例的基础上叠加单个槽位的宽/高倍数，得到该字专用的渲染状态。
+function getCellScaledState(state, sourceIndex) {
+  const setting = state.cellSettings?.[sourceIndex];
+  const w = Number(setting?.widthScale) || 1;
+  const h = Number(setting?.heightScale) || 1;
+  if (w === 1 && h === 1) return state;
+  return {
+    ...state,
+    fontWidthScale: (state.fontWidthScale || 1) * w,
+    fontHeightScale: (state.fontHeightScale || 1) * h,
+  };
 }
 
 function commitCellInput(input, index, moveNext = false) {
@@ -652,7 +681,40 @@ function buildCellInputs() {
       render();
     });
 
-    label.append(span, input, directionSelect);
+    const scaleRow = document.createElement("div");
+    scaleRow.className = "cell-scale-row";
+    const makeScaleField = (axis, labelText, value) => {
+      const field = document.createElement("label");
+      field.className = "cell-scale-field";
+      const cap = document.createElement("small");
+      cap.textContent = labelText;
+      const num = document.createElement("input");
+      num.type = "number";
+      num.min = "0.5";
+      num.max = "4";
+      num.step = "0.05";
+      num.value = String(value);
+      num.className = "cell-scale-input";
+      num.setAttribute("aria-label", `第 ${slotIndex + 1} 格${labelText}比例`);
+      num.draggable = false;
+      num.addEventListener("pointerdown", (event) => event.stopPropagation());
+      num.addEventListener("change", () => {
+        const next = clampCellScale(num.value);
+        num.value = String(next);
+        const key = axis === "width" ? "widthScale" : "heightScale";
+        cellSettings[slotIndex] = { ...cellSettings[slotIndex], [key]: next };
+        logDebug("单字比例", { index: slotIndex, axis, value: next });
+        render();
+      });
+      field.append(cap, num);
+      return field;
+    };
+    scaleRow.append(
+      makeScaleField("width", "宽", getCellWidthScale(slotIndex)),
+      makeScaleField("height", "高", getCellHeightScale(slotIndex)),
+    );
+
+    label.append(span, input, directionSelect, scaleRow);
     controls.cellInputs.appendChild(label);
   });
 
@@ -845,6 +907,8 @@ function readState() {
   const cells = Array.from({ length: gridCount }, (_, index) => cellValues[index] || "");
   const cellsSettings = Array.from({ length: gridCount }, (_, index) => ({
     flow: getCellFlow(index),
+    widthScale: getCellWidthScale(index),
+    heightScale: getCellHeightScale(index),
   }));
   const readingOrder = cellOrder.filter((index) => index >= 0 && index < gridCount);
   const readingText = readingOrder.map((index) => cells[index] || "").filter(Boolean).join("");
@@ -1344,6 +1408,8 @@ function applyLayoutConfig(layout) {
   if (Array.isArray(savedCellSettings)) {
     cellSettings = savedCellSettings.map((settings) => ({
       flow: settings?.flow === "ccw" || Number(settings?.direction || 0) === 180 ? "ccw" : "cw",
+      widthScale: clampCellScale(settings?.widthScale ?? 1),
+      heightScale: clampCellScale(settings?.heightScale ?? 1),
     }));
   }
   const savedCellOrder = Array.isArray(layout.cellOrder) ? layout.cellOrder : parameters.cellOrder;
@@ -3481,8 +3547,9 @@ function layoutRadialRing(state) {
   model.cells.forEach((cell) => {
     if (!cell.char) return;
     placed += 1;
+    const cellState = getCellScaledState(state, cell.sourceIndex);
     const glyph = font.getGlyph(cell.char);
-    const metrics = getGlyphVisualMetrics(glyph, font, state);
+    const metrics = getGlyphVisualMetrics(glyph, font, cellState);
     let startAngle = cell.slotStartAngle;
     let endAngle = cell.slotEndAngle;
 
@@ -3501,7 +3568,7 @@ function layoutRadialRing(state) {
       appendGlyphPath(
         cell.char,
         font,
-        state,
+        cellState,
         metrics.offsetX,
         mapPoint,
         cell.sourceIndex,
@@ -3521,17 +3588,17 @@ function layoutRadialRing(state) {
           glyphVisualWidth: metrics.width,
           glyphVisualHeight: metrics.height,
         },
-        state,
+        cellState,
         layoutRadius,
       );
       const blankAngle = Math.max(0, model.geometry.slotAngle - charAngle);
       startAngle = cell.slotStartAngle + blankAngle / 2;
       endAngle = startAngle + charAngle;
-      const mapPoint = getRadialRingMapPoint(cell, state, layoutRadius);
+      const mapPoint = getRadialRingMapPoint(cell, cellState, layoutRadius);
       appendGlyphPath(
         cell.char,
         font,
-        state,
+        cellState,
         metrics.offsetX,
         mapPoint,
         cell.sourceIndex,
@@ -3548,9 +3615,9 @@ function layoutRadialRing(state) {
           d: describeRingSector(slotGeometry.innerRadius, slotGeometry.outerRadius, slotGeometry.startAngle, slotGeometry.sweepAngle),
         });
       } else {
-        const debugHalfRadial = getScaledFontHeight(state) / 2;
+        const debugHalfRadial = getScaledFontHeight(cellState) / 2;
         const debugHalfArc = (model.geometry.slotAngle * Math.PI * layoutRadius) / 360;
-        const mapPoint = getRadialRingMapPoint(cell, state, layoutRadius);
+        const mapPoint = getRadialRingMapPoint(cell, cellState, layoutRadius);
         hitPath = createSvgElement("path", {
           class: "angle-hit-area",
           d: mappedRectPath(

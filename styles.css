@@ -34,7 +34,7 @@ svg,
 button,
 .segmented,
 .viewport-shell,
-.result-actions {
+.action-bar {
   -webkit-user-select: none;
   user-select: none;
 }
@@ -479,44 +479,24 @@ h1 {
   margin: 0 auto;
 }
 
-.result-actions {
-  display: none;
-}
-
-.simplified-ui.prep-result-ready .result-actions,
-.simplified-ui.debug-ui .result-actions {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: max(18px, env(safe-area-inset-bottom));
-  z-index: 20;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  padding: 0 18px;
-  pointer-events: none;
-}
-
 .result-action-button {
   min-width: 112px;
   min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid rgba(29, 27, 25, 0.18);
+  padding: 0 22px;
+  border: 1px solid var(--ink);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #1d1b19;
+  background: var(--ink);
+  color: #ffffff;
   font-family: "Huiwen-mincho", "Songti SC", "STSong", "Noto Serif CJK SC", serif;
   font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: 0.18em;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(10px);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
   cursor: pointer;
-  pointer-events: auto;
 }
 
 .result-action-button:hover {
-  background: #ffffff;
+  background: #000000;
 }
 
 .result-action-button[disabled] {
@@ -641,64 +621,74 @@ h1 {
   cursor: not-allowed;
 }
 
-.simplified-text-bar {
-  display: none;
-}
-
-.simplified-ui .simplified-text-bar {
+/* 统一操作栏：贴在预览下方，在流不悬浮，简化版与调试版共用 */
+.action-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: end;
-  justify-content: center;
-  gap: 12px;
-  width: min(720px, calc(100vw - 32px));
+  justify-content: space-between;
+  gap: 12px 16px;
+  width: 100%;
+  max-width: 860px;
   margin: 14px auto 0;
-  padding: 12px;
+  padding: 12px 14px;
   border: 1px solid rgba(83, 74, 61, 0.14);
+  border-radius: 10px;
   background: rgba(255, 253, 247, 0.92);
 }
 
-.simplified-ui .simplified-text-bar .text-bar-or {
-  color: var(--muted);
-  font-size: 0.9rem;
+.action-group {
+  display: flex;
+  align-items: end;
+  gap: 10px;
 }
 
-.simplified-ui .simplified-text-bar .ghost-action {
-  border: 1px solid var(--ink);
-  background: transparent;
-  color: var(--ink);
-  border-radius: 999px;
-  padding: 10px 22px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.2s ease, color 0.2s ease;
+.action-input {
+  flex: 1 1 320px;
 }
 
-.simplified-ui .simplified-text-bar .ghost-action:hover {
-  background: var(--ink);
-  color: #ffffff;
+.action-export {
+  flex: 0 0 auto;
 }
 
-.simplified-ui .simplified-text-bar .field {
+.action-bar .field {
   display: grid;
   gap: 4px;
   margin: 0;
 }
 
-.simplified-ui .simplified-text-bar .field span {
-  display: none;
+.action-input .field {
+  flex: 1;
 }
 
-.simplified-ui .simplified-text-bar #simpleAutoMatchText {
+.action-bar .field > span {
+  font-size: 0.78rem;
+  color: var(--muted, #85817b);
+  letter-spacing: 0.04em;
+}
+
+.action-bar #simpleAutoMatchText {
+  width: 100%;
   height: 44px;
   padding: 0 14px;
   border: 1px solid rgba(83, 74, 61, 0.28);
-  border-radius: 4px;
+  border-radius: 8px;
   color: #1d1b18;
   font-size: 1rem;
   background: #fffdf7;
 }
 
-.simplified-ui .simplified-text-bar #simpleAutoMatchLayout {
+.action-bar #exportResolution {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(83, 74, 61, 0.28);
+  border-radius: 8px;
+  background: #fffdf7;
+  color: #1d1b18;
+  font-size: 0.95rem;
+}
+
+.action-bar #simpleAutoMatchLayout {
   min-height: 44px;
   padding: 0 22px;
   border: 1px solid var(--ink);
@@ -707,10 +697,16 @@ h1 {
   font-weight: 600;
   background: var(--ink);
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.simplified-ui .simplified-text-bar #simpleAutoMatchLayout:hover {
+.action-bar #simpleAutoMatchLayout:hover {
   background: #000;
+}
+
+/* 简化版保持极简：隐藏分辨率选择，仅留导出 */
+.simplified-ui .action-resolution {
+  display: none;
 }
 
 .controls {
@@ -1022,6 +1018,37 @@ button:focus-visible {
 .cell-direction {
   width: 100%;
   height: 42px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #ffffff;
+}
+
+.cell-scale-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cell-scale-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.cell-scale-field small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.cell-scale-input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
   padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 8px;

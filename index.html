@@ -71,19 +71,30 @@
                 <button class="tiny-button" id="previewRelief" type="button">刷新 3D</button>
               </div>
               <canvas id="reliefPreviewCanvas" width="900" height="520" aria-label="3D 浮雕预览"></canvas>
-              <div class="result-actions simplified-only" aria-label="结果操作">
-                <button class="result-action-button" id="resultExportStl" type="button" aria-label="导出 STL 文件">导出</button>
-              </div>
             </div>
           </div>
         </div>
 
-        <div class="simplified-text-bar simplified-only">
-          <label class="field">
-            <span>匹配文字</span>
-            <input id="simpleAutoMatchText" type="text" placeholder="例如：长乐未央" />
-          </label>
-          <button class="primary-action compact-action" id="simpleAutoMatchLayout" type="button">自动匹配</button>
+        <div class="action-bar" aria-label="操作栏">
+          <div class="action-group action-input">
+            <label class="field">
+              <span>匹配文字</span>
+              <input id="simpleAutoMatchText" type="text" placeholder="例如：长乐未央" />
+            </label>
+            <button class="primary-action compact-action" id="simpleAutoMatchLayout" type="button">自动匹配</button>
+          </div>
+          <div class="action-group action-export">
+            <label class="field action-resolution">
+              <span>分辨率</span>
+              <select id="exportResolution">
+                <option value="320" selected>320</option>
+                <option value="480">480</option>
+                <option value="720">720</option>
+                <option value="1080">1080</option>
+              </select>
+            </label>
+            <button class="result-action-button" id="resultExportStl" type="button" aria-label="导出 STL 文件">导出 STL</button>
+          </div>
         </div>
       </section>
 
@@ -124,21 +135,8 @@
 
         <div class="control-group panel-card simplified-controls">
           <div class="panel-head">
-            <span class="label-text">字数匹配</span>
-            <p>输入整串文字，系统会扫描现有配置，选择字数完全匹配的瓦当模板并填入。</p>
-          </div>
-          <div class="panel-subcard">
-            <div class="subcard-head">
-              <span>自动匹配器</span>
-              <p>只按总字数匹配模板；若模板包含中心填字，最后一个字会进入中心格。</p>
-            </div>
-            <div class="inline-fields matcher-row">
-              <label class="field">
-                <span>匹配文字</span>
-                <input id="autoMatchText" type="text" placeholder="例如：长乐未央" />
-              </label>
-              <button class="primary-action compact-action" id="autoMatchLayout" type="button">自动匹配</button>
-            </div>
+            <span class="label-text">配置与排版</span>
+            <p>底部操作栏负责按字数自动匹配；这里管理快捷配置与逐格手动排版。</p>
           </div>
           <div class="panel-subcard advanced-only">
             <div class="subcard-head">
@@ -158,7 +156,7 @@
           <div class="panel-subcard advanced-only">
             <div class="subcard-head">
               <span>槽位控制</span>
-              <p>先定格数，再对每个槽位单独输入和调整方向。</p>
+              <p>先定格数，再对每个槽位单独输入文字、调整方向与字形宽高比例。</p>
             </div>
             <div class="inline-fields two-up">
               <label class="field">
@@ -573,24 +571,15 @@
 
         <div class="control-group panel-card">
           <div class="panel-head">
-            <span class="label-text">浮雕与导出</span>
-            <p>控制不同组件的浮雕高度、倒角与导出分辨率。</p>
+            <span class="label-text">浮雕参数</span>
+            <p>控制不同组件的浮雕高度与倒角。导出分辨率在底部操作栏选择。</p>
           </div>
           <div class="panel-subcard">
             <div class="subcard-head">
-              <span>导出基础</span>
-              <p>先决定导出分辨率，再分别设置不同组件的浮雕参数。</p>
+              <span>浮雕基础</span>
+              <p>设置整体风化效果，再分别调整各组件的浮雕参数。</p>
             </div>
             <div class="slider-grid">
-              <label class="field-span-full">
-                <span>分辨率</span>
-                <select id="exportResolution">
-                  <option value="320" selected>320</option>
-                  <option value="480">480</option>
-                  <option value="720">720</option>
-                  <option value="1080">1080</option>
-                </select>
-              </label>
               <label>
                 <span>风化金石趣</span>
                 <input id="weatheringStrength" type="range" min="0" max="100" step="1" value="0" />
